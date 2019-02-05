@@ -1,4 +1,4 @@
-from xml.etree import ElementTree
+from xml.etree.ElementTree import Element, parse
 from decimal import Decimal
 
 filename = "c:/Users/bevice/eagle/projects/bulychev/pwr/pwr_profile_test1.brd"
@@ -21,7 +21,39 @@ def get_element_name(element_name):
     return element_name.split(":")[1]
 
 
-tree = ElementTree.parse(filename)
+class LayoutElement:
+    def __init__(self, element):
+        self.element = element
+
+    def __copy__(self):
+        return LayoutElement(self.element.__copy__())
+
+    # пересчитываем относительные
+    def ref_coords(self, origin_x, origin_y):
+        if self.element.tag == "wire":
+            self._ref_coords_wire(origin_x, origin_y)
+        if self.element.tag in ["via", "drill"]:
+            self._ref_coords_xy(origin_x, origin_y)
+        if self.element.tag == "polygon":
+            for v in self.element.iter('vertex'):
+                v.attrib["x"] = str(Decimal(v.attrib["x"]) - origin_x)
+                v.attrib["y"] = str(Decimal(v.attrib["y"]) - origin_y)
+
+    def _ref_coords_wire(self, origin_x, origin_y):
+        self.element.attrib["x1"] = str(Decimal(self.element.attrib["x1"]) - origin_x)
+        self.element.attrib["y1"] = str(Decimal(self.element.attrib["y1"]) - origin_y)
+        self.element.attrib["x2"] = str(Decimal(self.element.attrib["x2"]) - origin_x)
+        self.element.attrib["y2"] = str(Decimal(self.element.attrib["y2"]) - origin_y)
+
+    def _ref_coords_xy(self, origin_x, origin_y):
+        self.element.attrib["x"] = str(Decimal(self.element.attrib["x"]) - origin_x)
+        self.element.attrib["y"] = str(Decimal(self.element.attrib["y"]) - origin_y)
+
+    def move(self, new_origin_x, new_origin_y):
+        self.ref_coords(-new_origin_x, -new_origin_y)
+
+
+tree = parse(filename)
 root = tree.getroot()
 
 positions = {}
