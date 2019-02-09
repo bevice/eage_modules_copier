@@ -1,4 +1,5 @@
 from xml.etree.ElementTree import Element, parse
+from copy import deepcopy
 from decimal import Decimal
 
 filename = "c:/Users/bevice/eagle/projects/bulychev/pwr/pwr_profile_test1.brd"
@@ -21,33 +22,33 @@ def get_element_name(element_name):
     return element_name.split(":")[1]
 
 
-class LayoutElement:
+class Signal:
     def __init__(self, element):
         self.element = element
 
-    def __copy__(self):
-        return LayoutElement(self.element.__copy__())
+    def copy(self):
+        return Signal(deepcopy(self.element))
 
     # пересчитываем относительные
     def ref_coords(self, origin_x, origin_y):
-        if self.element.tag == "wire":
-            self._ref_coords_wire(origin_x, origin_y)
-        if self.element.tag in ["via", "drill"]:
-            self._ref_coords_xy(origin_x, origin_y)
-        if self.element.tag == "polygon":
-            for v in self.element.iter('vertex'):
-                v.attrib["x"] = str(Decimal(v.attrib["x"]) - origin_x)
-                v.attrib["y"] = str(Decimal(v.attrib["y"]) - origin_y)
+        for e in self.element.iter():
+            if e.tag == "wire":
+                self._ref_coords_wire(e, origin_x, origin_y)
+            if e.tag in ["via", "drill"]:
+                self._ref_coords_xy(e, origin_x, origin_y)
+            if e.tag == "polygon":
+                for v in e.iter('vertex'):
+                    self._ref_coords_xy(v, origin_x, origin_y)
 
-    def _ref_coords_wire(self, origin_x, origin_y):
-        self.element.attrib["x1"] = str(Decimal(self.element.attrib["x1"]) - origin_x)
-        self.element.attrib["y1"] = str(Decimal(self.element.attrib["y1"]) - origin_y)
-        self.element.attrib["x2"] = str(Decimal(self.element.attrib["x2"]) - origin_x)
-        self.element.attrib["y2"] = str(Decimal(self.element.attrib["y2"]) - origin_y)
+    def _ref_coords_wire(self, e, origin_x, origin_y):
+        e.attrib["x1"] = str(Decimal(e.attrib["x1"]) - origin_x)
+        e.attrib["y1"] = str(Decimal(e.attrib["y1"]) - origin_y)
+        e.attrib["x2"] = str(Decimal(e.attrib["x2"]) - origin_x)
+        e.attrib["y2"] = str(Decimal(e.attrib["y2"]) - origin_y)
 
-    def _ref_coords_xy(self, origin_x, origin_y):
-        self.element.attrib["x"] = str(Decimal(self.element.attrib["x"]) - origin_x)
-        self.element.attrib["y"] = str(Decimal(self.element.attrib["y"]) - origin_y)
+    def _ref_coords_xy(self, e, origin_x, origin_y):
+        e.attrib["x"] = str(Decimal(e.attrib["x"]) - origin_x)
+        e.attrib["y"] = str(Decimal(e.attrib["y"]) - origin_y)
 
     def move(self, new_origin_x, new_origin_y):
         self.ref_coords(-new_origin_x, -new_origin_y)
@@ -103,6 +104,34 @@ for e in root.iter("element"):
                     and a.attrib["name"] in positions[name]["attribs"].keys():
                 a.attrib["x"] = str(modify_zeroes[module]["x"] + positions[name]["attribs"][a.attrib["name"]]["x"])
                 a.attrib["y"] = str(modify_zeroes[module]["y"] + positions[name]["attribs"][a.attrib["name"]]["y"])
+
+ref_signals = {}
+for signal in root.iter("signal"):
+    if get_module_name(signal.attrib["name"]) == REF_DESIGN:
+        le = Signal(deepcopy(signal))
+        ref_signals[get_element_name(signal.attrib["name"])] = le
+        le.ref_coords(ref_position["x"], ref_position["y"])
+        le.element.attrib["name"] = get_element_name(le.element.attrib["name"])
+
+for signal in root.iter("signal"):
+    if get_module_name(signal.attrib["name"]) not in MODIFY_DESIGN:
+        continue
+    signal_name = get_element_name(signal.attrib["name"])
+    module_name = get_module_name(signal.attrib["name"])
+    remove_elements = []
+    for e in signal.iter('wire'):
+        if Decimal(e.attrib["layer"]) == 19:
+            remove_elements.append(e)
+    for e in remove_elements:
+        signal.remove(e)
+
+    if signal_name in ref_signals:
+        le = ref_signals[signal_name].copy()
+        le.move(modify_zeroes[module_name]["x"], modify_zeroes[module_name]["y"])
+
+        for element in le.element.iter("wire"): signal.append(element)
+        for element in le.element.iter("polygon"): signal.append(element)
+        for element in le.element.iter("via"): signal.append(element)
 
 tree.write(open(f2, "wb"))
 
