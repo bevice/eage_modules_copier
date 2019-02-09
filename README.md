@@ -19,6 +19,8 @@ Where:
 * *--modify-module* - names of modules whose layouts will be modified
 
 ![Prepared board](https://github.com/bevice/eage_modules_copier/raw/master/prepare.png)
+
 The script converts to:
+
 ![Result board](https://github.com/bevice/eage_modules_copier/raw/master/result.png)
 
